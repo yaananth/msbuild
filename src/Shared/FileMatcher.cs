@@ -1303,9 +1303,10 @@ namespace Microsoft.Build.Shared
         /// <param name="needsRecursion">Receives the flag that is true if recursion is required.</param>
         /// <param name="isLegalFileSpec">Receives the flag that is true if the filespec is legal.</param>
         /// <param name="getFileSystemEntries">Delegate.</param>
+        /// <param name="messages"></param>
         /// <param name="fixupParts">hook method to further change the parts</param>
         internal static void GetFileSpecInfo
-        (
+            (
             string filespec,
             out string fixedDirectoryPart,
             out string wildcardDirectoryPart,
@@ -1314,8 +1315,8 @@ namespace Microsoft.Build.Shared
             out bool needsRecursion,
             out bool isLegalFileSpec,
             GetFileSystemEntries getFileSystemEntries,
-            FixupParts fixupParts = null
-        )
+            List<string> messages = null,
+            FixupParts fixupParts = null)
         {
             isLegalFileSpec = true;
             needsRecursion = false;
@@ -1324,7 +1325,7 @@ namespace Microsoft.Build.Shared
             filenamePart = String.Empty;
             matchFileExpression = null;
 
-            if (!RawFileSpecIsValid(filespec))
+            if (!RawFileSpecIsValid(filespec, messages))
             {
                 isLegalFileSpec = false;
                 return;
@@ -1355,6 +1356,7 @@ namespace Microsoft.Build.Shared
              */
             if (!isLegalFileSpec)
             {
+                messages?.Add("Filespec is invalid because it could not be converted to a Regex expression");
                 return;
             }
 
@@ -1364,11 +1366,12 @@ namespace Microsoft.Build.Shared
             needsRecursion = (wildcardDirectoryPart.Length != 0);
         }
 
-        internal static bool RawFileSpecIsValid(string filespec)
+        internal static bool RawFileSpecIsValid(string filespec, List<string> messages)
         {
             // filespec cannot contain illegal characters
             if (-1 != filespec.IndexOfAny(s_invalidPathChars))
             {
+                messages?.Add("Filespec is invalid because it contains invalid path chars");
                 return false;
             }
 
@@ -1379,6 +1382,7 @@ namespace Microsoft.Build.Shared
              */
             if (-1 != filespec.IndexOf("...", StringComparison.Ordinal))
             {
+                messages?.Add("Filespec is invalid because it contains ...");
                 return false;
             }
 
@@ -1397,6 +1401,7 @@ namespace Microsoft.Build.Shared
                 && 1 != rightmostColon
             )
             {
+                messages?.Add("Filespec is invalid because ot contains : that's not the second character");
                 return false;
             }
 
@@ -1694,6 +1699,7 @@ namespace Microsoft.Build.Shared
         (
             string projectDirectoryUnescaped,
             string filespecUnescaped,
+            List<String> messages = null,
             IEnumerable<string> excludeSpecsUnescaped = null,
             ConcurrentDictionary<string, ImmutableArray<string>> entriesCache = null
         )
@@ -1732,6 +1738,7 @@ namespace Microsoft.Build.Shared
                                         GetFiles(
                                             projectDirectoryUnescaped,
                                             filespecUnescaped,
+                                            messages,
                                             excludeSpecsUnescaped,
                                             getFileSystemEntries,
                                             s_defaultDirectoryExists));
@@ -1749,6 +1756,7 @@ namespace Microsoft.Build.Shared
                 string[] files = GetFiles(
                     projectDirectoryUnescaped,
                     filespecUnescaped,
+                    messages,
                     excludeSpecsUnescaped,
                     getFileSystemEntries,
                     s_defaultDirectoryExists);
@@ -1781,9 +1789,14 @@ namespace Microsoft.Build.Shared
             ReturnEmptyList,
         }
 
-        static SearchAction GetFileSearchData(string projectDirectoryUnescaped, string filespecUnescaped,
-            GetFileSystemEntries getFileSystemEntries, DirectoryExists directoryExists, out bool stripProjectDirectory,
-            out RecursionState result)
+        private static SearchAction GetFileSearchData(
+            string projectDirectoryUnescaped,
+            string filespecUnescaped,
+            GetFileSystemEntries getFileSystemEntries,
+            DirectoryExists directoryExists,
+            out bool stripProjectDirectory,
+            out RecursionState result,
+            List<string> messages = null)
         {
             stripProjectDirectory = false;
             result = new RecursionState();
@@ -1803,7 +1816,8 @@ namespace Microsoft.Build.Shared
                 out matchFileExpression,
                 out needsRecursion,
                 out isLegalFileSpec,
-                getFileSystemEntries
+                getFileSystemEntries,
+                messages
             );
 
             /*
@@ -1827,6 +1841,7 @@ namespace Microsoft.Build.Shared
                     }
                     catch (ArgumentException)
                     {
+                        messages?.Add($"Exception while combining paths {projectDirectoryUnescaped} and {fixedDirectoryPart}");
                         return SearchAction.ReturnEmptyList;
                     }
 
@@ -1845,6 +1860,7 @@ namespace Microsoft.Build.Shared
              */
             if (fixedDirectoryPart.Length > 0 && !directoryExists(fixedDirectoryPart))
             {
+                messages?.Add($"Returning empty list because ({fixedDirectoryPart}.Length > 0 && !directoryExists({fixedDirectoryPart}))");
                 return SearchAction.ReturnEmptyList;
             }
 
@@ -2011,6 +2027,7 @@ namespace Microsoft.Build.Shared
         (
             string projectDirectoryUnescaped,
             string filespecUnescaped,
+            List<String> messages,
             IEnumerable<string> excludeSpecsUnescaped,
             GetFileSystemEntries getFileSystemEntries,
             DirectoryExists directoryExists
@@ -2034,8 +2051,14 @@ namespace Microsoft.Build.Shared
              */
             bool stripProjectDirectory;
             RecursionState state;
-            var action = GetFileSearchData(projectDirectoryUnescaped, filespecUnescaped, getFileSystemEntries, directoryExists,
-                out stripProjectDirectory, out state);
+            var action = GetFileSearchData(
+                projectDirectoryUnescaped,
+                filespecUnescaped,
+                getFileSystemEntries,
+                directoryExists,
+                out stripProjectDirectory,
+                out state,
+                messages);
 
             if (action == SearchAction.ReturnEmptyList)
             {
@@ -2224,12 +2247,20 @@ namespace Microsoft.Build.Shared
                 // Flatten to get exceptions than are thrown inside a nested Parallel.ForEach
                 if (ex.Flatten().InnerExceptions.All(ExceptionHandling.IsIoRelatedException))
                 {
+                    var sb = new StringBuilder();
+                    foreach (var innerException in ex.Flatten().InnerExceptions)
+                    {
+                        sb.Append(innerException.ToString());
+                    }
+
+                    messages?.Add($"IO Related Exceptions:\n{sb}");
                     return CreateArrayWithSingleItemIfNotExcluded(filespecUnescaped, excludeSpecsUnescaped);
                 }
                 throw;
             }
             catch (Exception ex) when (ExceptionHandling.IsIoRelatedException(ex))
             {
+                messages?.Add($"IO Related Exception:\n{ex}");
                 // Assume it's not meant to be a path
                 return CreateArrayWithSingleItemIfNotExcluded(filespecUnescaped, excludeSpecsUnescaped);
             }
@@ -2241,6 +2272,7 @@ namespace Microsoft.Build.Shared
                 ? listOfFiles.SelectMany(list => list).Where(f => !resultsToExclude.Contains(f)).ToArray()
                 : listOfFiles.SelectMany(list => list).ToArray();
 
+            messages?.Add($"Successfull expansion {filespecUnescaped} -> {string.Join(",", files)}");
             return files;
         }
 

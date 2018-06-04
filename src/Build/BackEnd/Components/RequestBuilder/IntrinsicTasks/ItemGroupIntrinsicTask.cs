@@ -401,12 +401,15 @@ namespace Microsoft.Build.BackEnd
                     // The expression is not of the form "@(X)". Treat as string
 
                     // Pass the non wildcard expanded excludes here to fix https://github.com/Microsoft/msbuild/issues/2621
+                    var messages = new List<string>();
                     string[] includeSplitFiles = EngineFileUtilities.GetFileListEscaped(
                         Project.Directory,
                         includeSplit,
                         excludes,
                         false,
-                        new ConcurrentDictionary<string, ImmutableArray<string>>());
+                        new ConcurrentDictionary<string, ImmutableArray<string>>(),
+                        messages);
+                    LogGlobMessages(includeSplit, messages);
 
                     foreach (string includeSplitFile in includeSplitFiles)
                     {
@@ -427,7 +430,9 @@ namespace Microsoft.Build.BackEnd
 
             foreach (string excludeSplit in excludes)
             {
-                string[] excludeSplitFiles = EngineFileUtilities.GetFileListUnescaped(Project.Directory, excludeSplit);
+                var messages = new List<string>();
+                string[] excludeSplitFiles = EngineFileUtilities.GetFileListUnescaped(Project.Directory, excludeSplit, false, messages);
+                LogGlobMessages(excludeSplit, messages);
 
                 foreach (string excludeSplitFile in excludeSplitFiles)
                 {
@@ -474,6 +479,18 @@ namespace Microsoft.Build.BackEnd
             return items;
         }
 
+        private void LogGlobMessages(string filespec, List<string> messages)
+        {
+            if (messages.Count == 0)
+            {
+                return;
+            }
+
+            var message = $"GlobExpansion messages for \"{filespec}\" at ({_taskInstance.Location}):\n{string.Join("\n", messages)}";
+
+            LoggingContext.LogCommentFromText(MessageImportance.Low, message);
+        }
+
         /// <summary>
         /// Returns a list of all items in the provided item group whose itemspecs match the specification, after it is split and any wildcards are expanded.
         /// If no items match, returns null.
@@ -512,7 +529,9 @@ namespace Microsoft.Build.BackEnd
                 // Don't unescape wildcards just yet - if there were any escaped, the caller wants to treat them
                 // as literals. Everything else is safe to unescape at this point, since we're only matching
                 // against the file system.
-                string[] fileList = EngineFileUtilities.GetFileListEscaped(Project.Directory, piece);
+                var messages = new List<string>();
+                string[] fileList = EngineFileUtilities.GetFileListEscaped(Project.Directory, piece, messages);
+                LogGlobMessages(piece, messages);
 
                 foreach (string file in fileList)
                 {

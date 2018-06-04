@@ -79,7 +79,7 @@ namespace Microsoft.Build.UnitTests
 
             void Verify(string include, string[] excludes, bool shouldHaveNoMatches = false, string customMessage = null)
             {
-                string[] matchedFiles = FileMatcher.GetFiles(testFolder.FolderPath, include, excludes);
+                string[] matchedFiles = FileMatcher.GetFiles(testFolder.FolderPath, include, null, excludes);
 
                 if (shouldHaveNoMatches)
                 {
@@ -1259,11 +1259,11 @@ namespace Microsoft.Build.UnitTests
                     Array.Sort(files);
                     Assert.Equal(new []{"a.cs", "b.cs", "c.cs"}, files);
 
-                    files = FileMatcher.GetFiles(testProject.TestRoot, "**/*.cs", new []{"a.cs"});
+                    files = FileMatcher.GetFiles(testProject.TestRoot, "**/*.cs", null, new []{"a.cs"});
                     Array.Sort(files);
                     Assert.Equal(new[] {"b.cs", "c.cs" }, files);
 
-                    files = FileMatcher.GetFiles(testProject.TestRoot, "**/*.cs", new []{"a.cs", "c.cs"});
+                    files = FileMatcher.GetFiles(testProject.TestRoot, "**/*.cs", null, new []{"a.cs", "c.cs"});
                     Array.Sort(files);
                     Assert.Equal(new[] {"b.cs" }, files);
                 }
@@ -2004,6 +2004,7 @@ namespace Microsoft.Build.UnitTests
             (
                 String.Empty, /* we don't need project directory as we use mock filesystem */
                 filespec,
+                null,
                 excludeFilespecs?.ToList(),
                 new FileMatcher.GetFileSystemEntries(mockFileSystem.GetAccessibleFileSystemEntries),
                 new DirectoryExists(mockFileSystem.DirectoryExists)

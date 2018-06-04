@@ -55,11 +55,12 @@ namespace Microsoft.Build.Internal
             (
             string directoryEscaped,
             string filespecEscaped,
-            bool forceEvaluate = false
+            bool forceEvaluate = false,
+            List<string> messages = null
             )
 
         {
-            return GetFileList(directoryEscaped, filespecEscaped, false /* returnEscaped */, forceEvaluate);
+            return GetFileList(directoryEscaped, filespecEscaped, false /* returnEscaped */, forceEvaluate, messages);
         }
 
         /// <summary>
@@ -84,10 +85,11 @@ namespace Microsoft.Build.Internal
             string filespecEscaped,
             IEnumerable<string> excludeSpecsEscaped = null,
             bool forceEvaluate = false,
-            ConcurrentDictionary<string, ImmutableArray<string>> entriesCache = null
+            ConcurrentDictionary<string, ImmutableArray<string>> entriesCache = null,
+            List<string> messages = null
             )
         {
-            return GetFileList(directoryEscaped, filespecEscaped, true /* returnEscaped */, forceEvaluate, excludeSpecsEscaped, entriesCache);
+            return GetFileList(directoryEscaped, filespecEscaped, true /* returnEscaped */, forceEvaluate, messages, excludeSpecsEscaped, entriesCache);
         }
 
         internal static bool FilespecHasWildcards(string filespecEscaped)
@@ -137,6 +139,7 @@ namespace Microsoft.Build.Internal
             string filespecEscaped,
             bool returnEscaped,
             bool forceEvaluateWildCards,
+            List<string> messages = null,
             IEnumerable<string> excludeSpecsEscaped = null,
             ConcurrentDictionary<string, ImmutableArray<string>> entriesCache = null
             )
@@ -150,9 +153,16 @@ namespace Microsoft.Build.Internal
 
             string[] fileList;
 
+            var filespecMatchesLazyWildcard = FilespecMatchesLazyWildcard(filespecEscaped, forceEvaluateWildCards);
+
             if (!FilespecHasWildcards(filespecEscaped) ||
-                FilespecMatchesLazyWildcard(filespecEscaped, forceEvaluateWildCards))
+                filespecMatchesLazyWildcard)
             {
+                if (filespecMatchesLazyWildcard)
+                {
+                    messages?.Add($"Original filespec returned because quickbuild does not want it expanded");
+                }
+
                 // Just return the original string.
                 fileList = new string[] { returnEscaped ? filespecEscaped : EscapingUtilities.UnescapeAll(filespecEscaped) };
             }
@@ -173,7 +183,7 @@ namespace Microsoft.Build.Internal
                 // as a relative path, we will get back a bunch of relative paths.
                 // If the filespec started out as an absolute path, we will get
                 // back a bunch of absolute paths.
-                fileList = FileMatcher.GetFiles(directoryUnescaped, filespecUnescaped, excludeSpecsUnescaped, entriesCache);
+                fileList = FileMatcher.GetFiles(directoryUnescaped, filespecUnescaped, messages, excludeSpecsUnescaped, entriesCache);
 
                 ErrorUtilities.VerifyThrow(fileList != null, "We must have a list of files here, even if it's empty.");
 

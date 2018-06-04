@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Build.Construction;
 using System.Collections.Immutable;
+using Microsoft.Build.Framework;
 using Microsoft.Build.Internal;
 using Microsoft.Build.Shared;
 
@@ -31,6 +32,18 @@ namespace Microsoft.Build.Evaluation
 
                 _excludes = builder.Excludes.ToImmutable();
                 _metadata = builder.Metadata.ToImmutable();
+            }
+
+            private void LogGlobMessages(string filespec, List<string> messages)
+            {
+                if (messages.Count == 0)
+                {
+                    return;
+                }
+
+                var message = $"GlobExpansion messages for \"{filespec}\" at ({_itemElement.Location}):\n{string.Join("\n", messages)}";
+
+                this._lazyEvaluator._loggingContext.LogCommentFromText(MessageImportance.Low, message);
             }
 
             protected override ImmutableList<I> SelectItems(ImmutableList<ItemData>.Builder listBuilder, ImmutableHashSet<string> globsToIgnore)
@@ -100,12 +113,17 @@ namespace Microsoft.Build.Evaluation
                         using (_lazyEvaluator._evaluationProfiler.TrackGlob(_rootDirectory, glob,
                             excludePatternsForGlobs))
                         {
+
+                            var messages = new List<string>();
                             includeSplitFilesEscaped = EngineFileUtilities.GetFileListEscaped(
                                 _rootDirectory,
                                 glob,
                                 excludePatternsForGlobs,
-                                entriesCache: EntriesCache
+                                false,
+                                entriesCache: EntriesCache,
+                                messages: messages
                             );
+                            LogGlobMessages(glob, messages);
                         }
 
                         foreach (string includeSplitFileEscaped in includeSplitFilesEscaped)

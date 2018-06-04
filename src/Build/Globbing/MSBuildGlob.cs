@@ -193,6 +193,7 @@ namespace Microsoft.Build.Globbing
                     out needsRecursion,
                     out isLegalFileSpec,
                     FileMatcher.s_defaultGetFileSystemEntries,
+                    null,
                     (fixedDirPart, wildcardDirPart, filePart) =>
                     {
                         var normalizedFixedPart = NormalizeTheFixedDirectoryPartAgainstTheGlobRoot(fixedDirPart, globRoot);
