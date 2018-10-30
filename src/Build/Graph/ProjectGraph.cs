@@ -16,6 +16,7 @@ using Microsoft.Build.Evaluation;
 using Microsoft.Build.Exceptions;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Shared;
+using System.IO;
 
 namespace Microsoft.Build.Graph
 {
@@ -524,7 +525,24 @@ namespace Microsoft.Build.Graph
                 string projectReferenceFullPath = projectReferenceToParse.GetMetadataValue(FullPathMetadataName);
                 PropertyDictionary<ProjectPropertyInstance> projectReferenceGlobalProperties = GetProjectReferenceGlobalProperties(projectReferenceToParse, globalProperties);
                 var projectReferenceConfigurationMetadata = new ConfigurationMetadata(projectReferenceFullPath, projectReferenceGlobalProperties);
-                ProjectGraphNode projectReference = _allParsedProjects[projectReferenceConfigurationMetadata];
+                ProjectGraphNode projectReference = null;
+                try
+                {
+                    projectReference = _allParsedProjects[projectReferenceConfigurationMetadata];
+                }
+                catch (KeyNotFoundException)
+                {
+                    var sb = new StringBuilder(500);
+                    sb.Append($"Num of projects in graph: {_allParsedProjects.Count}").AppendLine();
+                    sb.AppendLine($"ConfigurationMetadata for missing key: {projectReferenceConfigurationMetadata.ProjectFullPath}, {projectReferenceConfigurationMetadata.GlobalProperties.Count}, {projectReferenceConfigurationMetadata.ToolsVersion}").AppendLine();
+                    sb.AppendLine("All projects:");
+                    foreach(var key in _allParsedProjects.Keys)
+                    {
+                        sb.Append($"{key.ProjectFullPath}, {key.GlobalProperties.Count}, {key.ToolsVersion}").AppendLine();
+                    }
+                    
+                    throw new Exception(sb.ToString());
+                }
                 if (nodeState.TryGetValue(projectReference, out NodeState projectReferenceNodeState))
                 {
                     // Because this is a depth-first search, we should only encounter new nodes or nodes whose subgraph has been completely processed.

@@ -17,6 +17,28 @@ namespace Microsoft.Build.Graph.UnitTests
 {
     public class ProjectGraphTests
     {
+
+        [Fact]
+        public void Test()
+        {
+            while(true)
+            {
+                using (var env = TestEnvironment.Create())
+                {
+                    CreateProject(env, 1, new[] { 4, 5 });
+                    TransientTestFile entryProject = CreateProject(env, 2, new[] { 3, 5, 6 });
+                    CreateProject(env, 3);
+                    CreateProject(env, 4);
+                    CreateProject(env, 5, new[] { 7 });
+                    CreateProject(env, 6, new[] { 1 });
+                    CreateProject(env, 7);
+
+                    ProjectGraph graph = new ProjectGraph(entryProject.Path);
+                }
+            }
+
+        }
+
         [Fact]
         public void ConstructWithSingleNode()
         {
